@@ -1,0 +1,28 @@
+### Variáveis Globais
+@baseUrl = http://localhost:5000
+
+# Product
+
+### List
+GET {{baseUrl}}/api/products
+
+### Get By Bar Code
+GET {{baseUrl}}/api/products/9788550807348
+
+### Create
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+
+{
+  "modelSku": "OS PRIMEIROS 90 DIAS",
+  "barCode": "9788550807348"
+}
+
+### Update
+PUT {{baseUrl}}/api/products/9788550807348
+Content-Type: application/json
+
+{
+  "modelSku": "OS PRIMEIROS 90 DIAS",
+  "imageUrl": "https://m.media-amazon.com/images/I/61SRxyLT28L._SL1442_.jpg"
+}
