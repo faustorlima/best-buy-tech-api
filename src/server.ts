@@ -20,9 +20,68 @@ app.get("/health", (req, res) => {
 
 app.get("/api/products", async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM products");
-    return res.json(result.rows);
+    // 1. Extrai search, page e limit da query string (com valores padrão caso não sejam enviados)
+    const { search, page = "1", limit = "10" } = req.query;
+
+    // Converte para número inteiro
+    const pageNumber = parseInt(page as string, 10);
+    const limitNumber = parseInt(limit as string, 10);
+
+    // Calcula o deslocamento (offset) para o SQL
+    const offset = (pageNumber - 1) * limitNumber;
+
+    // 2. Base da query SQL para buscar os dados
+    let query = `
+      SELECT
+        product_id AS "productId",
+        bar_code AS "barCode",
+        model_sku AS "modelSku",
+        image_url AS "imageUrl"
+      FROM products
+    `;
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+
+    // 3. Condição de busca (opcional)
+    if (search) {
+      query += ` WHERE bar_code ILIKE $${paramIndex} OR model_sku ILIKE $${paramIndex}`;
+      queryParams.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    // 4. Adiciona Ordenação, Limite e Offset para a paginação
+    // (Ex: ORDER BY id DESC para mostrar os mais recentes primeiro)
+    query += ` ORDER BY model_sku DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    queryParams.push(limitNumber, offset);
+
+    // 5. Executa a query principal
+    const result = await db.query(query, queryParams);
+
+    // 6. (Opcional mas recomendado) Busca o total de registros para o Front-end saber quantas páginas existem
+    let countQuery = "SELECT COUNT(*) FROM products";
+    const countParams: any[] = [];
+
+    if (search) {
+      countQuery += " WHERE bar_code ILIKE $1 OR model_sku ILIKE $1";
+      countParams.push(`%${search}%`);
+    }
+
+    const countResult = await db.query(countQuery, countParams);
+    const totalItems = parseInt(countResult.rows[0].count, 10);
+    const totalPages = Math.ceil(totalItems / limitNumber);
+
+    // 7. Retorna os dados junto com os metadados de paginação
+    return res.json({
+      data: result.rows,
+      pagination: {
+        currentPage: pageNumber,
+        perPage: limitNumber,
+        totalItems,
+        totalPages,
+      },
+    });
   } catch (error) {
+    console.log(error);
     return res.status(500).json({ error: "Erro ao buscar produtos" });
   }
 });
