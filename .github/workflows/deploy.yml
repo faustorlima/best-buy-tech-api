@@ -51,16 +51,23 @@ jobs:
             # Baixa a nova imagem da API
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
+            # Cria ou sobrescreve o arquivo .env no diretório de trabalho do servidor
+            echo "PORT=5000" > .env
+            echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+            echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> .env
+
             # Remove o container antigo da API se existir
             docker stop api_prod || true
             docker rm api_prod || true
 
-            # Sobe o novo container da API (expondo na porta 5000 do servidor)
+            # Sobe o novo container da API utilizando o arquivo .env gerado
             docker run -d \
               --name api_prod \
               -p 5000:5000 \
               --restart unless-stopped \
-              -e PORT=5000 \
+              --env-file .env \
               ghcr.io/${{ env.IMAGE_NAME }}:latest
 
             # Limpa imagens órfãs
