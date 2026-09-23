@@ -181,13 +181,13 @@ app.post(
       const query = `
         INSERT INTO products (model_sku, bar_code, imei_count)
         VALUES ${validProducts.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2},$${i * 3 + 3})`).join(", ")}
-        ON CONFLICT (model_sku)
+        ON CONFLICT (model_sku) WHERE is_deleted = false
         DO UPDATE SET
           bar_code = EXCLUDED.bar_code,
           imei_count = EXCLUDED.imei_count;
       `;
       const values = validProducts.flatMap((p) => [
-        p.modelSku,
+        p.modelSku ? p.modelSku.toUpperCase() : "",
         p.barCode,
         p.imeiCount,
       ]);
@@ -266,7 +266,7 @@ app.get("/api/products", async (req, res) => {
 
     // 3. Condição de busca (opcional)
     if (search) {
-      query += ` WHERE bar_code ILIKE $${paramIndex} OR model_sku ILIKE $${paramIndex}`;
+      query += ` AND bar_code ILIKE $${paramIndex} OR model_sku ILIKE $${paramIndex}`;
       queryParams.push(`%${search}%`);
       paramIndex++;
     }
@@ -280,7 +280,7 @@ app.get("/api/products", async (req, res) => {
     const result = await db.query(query, queryParams);
 
     // 6. (Opcional mas recomendado) Busca o total de registros para o Front-end saber quantas páginas existem
-    let countQuery = "SELECT COUNT(*) FROM products";
+    let countQuery = "SELECT COUNT(*) FROM products WHERE is_deleted = false";
     const countParams: any[] = [];
 
     if (search) {
@@ -339,7 +339,7 @@ app.put(
   uploadPhoto.single("image"),
   async (req: Request, res: Response): Promise<any> => {
     try {
-      const { modelSku } = req.body;
+      const { modelSku, imeiCount } = req.body;
       const { barCode } = req.params;
       const imageUrl = (req.file as any)?.location;
 
@@ -349,7 +349,20 @@ app.put(
       if (imageUrl) {
         query = `
         UPDATE products
-        SET model_sku = $1, image_url = $2
+        SET model_sku = $1, image_url = $2, imei_count = $3
+        WHERE bar_code = $4
+        RETURNING
+          product_id AS "productId",
+          bar_code AS "barCode",
+          model_sku AS "modelSku",
+          image_url AS "imageUrl",
+          imei_count AS "imeiCount"
+      `;
+        params = [modelSku, imageUrl, imeiCount, barCode];
+      } else {
+        query = `
+        UPDATE products
+        SET model_sku = $1, imei_count = $2
         WHERE bar_code = $3
         RETURNING
           product_id AS "productId",
@@ -358,20 +371,7 @@ app.put(
           image_url AS "imageUrl",
           imei_count AS "imeiCount"
       `;
-        params = [modelSku, imageUrl, barCode];
-      } else {
-        query = `
-        UPDATE products
-        SET model_sku = $1
-        WHERE bar_code = $2
-        RETURNING
-          product_id AS "productId",
-          bar_code AS "barCode",
-          model_sku AS "modelSku",
-          image_url AS "imageUrl",
-          imei_count AS "imeiCount"
-      `;
-        params = [modelSku, barCode];
+        params = [modelSku, imeiCount, barCode];
       }
 
       const result = await db.query(query, params);
@@ -394,12 +394,12 @@ app.post(
   uploadPhoto.single("image"),
   async (req: Request, res: Response): Promise<any> => {
     try {
-      const { modelSku, barCode } = req.body;
+      const { modelSku, barCode, imeiCount } = req.body;
       const imageUrl = (req.file as any)?.location || null;
 
       const queryText = `
-      INSERT INTO products (model_sku, bar_code, image_url)
-      VALUES ($1, $2, $3)
+      INSERT INTO products (model_sku, bar_code, image_url, imei_count)
+      VALUES ($1, $2, $3, $4)
       RETURNING
         product_id AS "productId",
         bar_code AS "barCode",
@@ -408,7 +408,12 @@ app.post(
         imei_count AS "imeiCount"
     `;
 
-      const result = await db.query(queryText, [modelSku, barCode, imageUrl]);
+      const result = await db.query(queryText, [
+        modelSku,
+        barCode,
+        imageUrl,
+        imeiCount,
+      ]);
       return res.status(201).json(result.rows[0]);
     } catch (error) {
       console.error("Erro ao inserir produto:", error);
