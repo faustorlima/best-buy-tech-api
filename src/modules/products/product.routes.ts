@@ -8,8 +8,15 @@ import Papa from "papaparse";
 import { Pool } from "pg";
 import dotenv from "dotenv";
 dotenv.config();
+import {
+  authenticateToken,
+  type AuthRequest,
+} from "../auth/middlewares/authMiddleware.js";
 
 const router = Router();
+
+// Aplica o middleware a TODAS as rotas declaradas abaixo deste ponto neste ficheiro
+router.use(authenticateToken);
 
 // Conexão direta com o banco de dados
 const pool = new Pool({
@@ -53,7 +60,7 @@ interface ProductImportDTO {
 router.post(
   "/import",
   upload.single("file"),
-  async (req: Request, res: Response): Promise<any> => {
+  async (req: AuthRequest, res: Response): Promise<any> => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file provided." });
@@ -202,7 +209,7 @@ router.post(
 );
 
 // Exemplo de rota DELETE para exclusão lógica
-router.delete("/:barCode", async (req, res) => {
+router.delete("/:barCode", async (req: AuthRequest, res) => {
   const { barCode } = req.params;
   console.log("barCode", barCode);
   try {
@@ -230,7 +237,7 @@ router.delete("/:barCode", async (req, res) => {
   }
 });
 
-router.get("/", async (req, res) => {
+router.get("/", async (req: AuthRequest, res) => {
   try {
     // 1. Extrai search, page e limit da query string (com valores padrão caso não sejam enviados)
     let { search, page = "1", limit = "10" } = req.query;
@@ -303,7 +310,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.get("/:barCode", async (req, res) => {
+router.get("/:barCode", async (req: AuthRequest, res) => {
   const { barCode } = req.params; // Captura o barCode da URL
   const queryText = `
     SELECT *
@@ -330,7 +337,7 @@ router.get("/:barCode", async (req, res) => {
 router.put(
   "/:barCode",
   uploadPhoto.single("image"),
-  async (req: Request, res: Response): Promise<any> => {
+  async (req: AuthRequest, res: Response): Promise<any> => {
     try {
       const { modelSku, imeiCount } = req.body;
       const { barCode } = req.params;
@@ -385,7 +392,7 @@ router.put(
 router.post(
   "/",
   uploadPhoto.single("image"),
-  async (req: Request, res: Response): Promise<any> => {
+  async (req: AuthRequest, res: Response): Promise<any> => {
     try {
       const { modelSku, barCode, imeiCount } = req.body;
       const imageUrl = (req.file as any)?.location || null;

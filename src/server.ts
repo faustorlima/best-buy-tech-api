@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import inventoryRoutes from "./modules/inventory/inventory.routes.js";
 import productRoutes from "./modules/products/product.routes.js";
 import dispatchRoutes from "./modules/dispatch/dispatch.route.js";
+import authRoutes from "./modules/auth/auth.routes.js";
 dotenv.config();
 
 const PORT = process.env.PORT || 3000;
@@ -17,6 +18,7 @@ app.use(cors());
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/dispatch", dispatchRoutes);
+app.use("/api/auth", authRoutes);
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });

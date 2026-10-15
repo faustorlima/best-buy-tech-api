@@ -4,7 +4,15 @@ import { Pool } from "pg";
 import dotenv from "dotenv";
 dotenv.config();
 
+import {
+  authenticateToken,
+  type AuthRequest,
+} from "../auth/middlewares/authMiddleware.js";
+
 const router = Router();
+
+// Aplica o middleware a TODAS as rotas declaradas abaixo deste ponto neste ficheiro
+router.use(authenticateToken);
 
 // Conexão direta com o banco de dados
 const pool = new Pool({
@@ -12,7 +20,7 @@ const pool = new Pool({
     "postgresql://bestbuy:J36XZHt0ii1CbBE@143.198.150.13:5432/bestbuydb",
 });
 
-router.get("/:search", async (req, res) => {
+router.get("/:search", async (req: AuthRequest, res) => {
   // 1. Extrai search, page e limit da query string (com valores padrão caso não sejam enviados)
   let { search } = req.params;
 
@@ -73,7 +81,7 @@ router.get("/:search", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", async (req: AuthRequest, res) => {
   const { orderId, items } = req.body;
 
   if (!orderId) {
