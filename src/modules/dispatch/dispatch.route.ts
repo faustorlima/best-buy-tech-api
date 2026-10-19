@@ -12,7 +12,7 @@ import {
 const router = Router();
 
 // Aplica o middleware a TODAS as rotas declaradas abaixo deste ponto neste ficheiro
-router.use(authenticateToken);
+// router.use(authenticateToken);
 
 // Conexão direta com o banco de dados
 const pool = new Pool({
@@ -20,7 +20,56 @@ const pool = new Pool({
     "postgresql://bestbuy:J36XZHt0ii1CbBE@143.198.150.13:5432/bestbuydb",
 });
 
+router.get("/summary", async (req: AuthRequest, res) => {
+  // 1. Extrai search, page e limit da query string (com valores padrão caso não sejam enviados)
+  let { invoiceFrom, invoiceTo } = req.query;
+
+  console.log("invoice_from", invoiceFrom);
+  console.log("invoice_to", invoiceTo);
+
+  // 2. Base da query SQL para buscar os dados
+  let query = `
+
+    SELECT
+        s."name" AS "storeName",
+        CASE
+            WHEN fo.order_original_status = 'READY_TO_SHIP' AND fo.dispatched_at IS NULL THEN 'Pendente'
+            WHEN fo.dispatched_at IS NOT NULL THEN 'Bipado'
+            WHEN fo.order_original_status <> 'READY_TO_SHIP' AND fo.dispatched_at IS NULL THEN 'Enviado sem Bipagem'
+        END AS status,
+        COUNT(fo.full_order_id) AS "ordersCount",
+        COALESCE(SUM(foi.item_count), 0) AS "productsCount"
+    FROM invoices i
+    INNER JOIN full_orders fo
+        ON fo.order_number = i.order_number
+      AND fo.store_id = i.store_id
+    INNER JOIN stores s
+        ON i.store_id = s.store_id
+    LEFT JOIN LATERAL (
+        -- Busca a contagem já agrupada aproveitando o índice de order_number
+        SELECT COUNT(*) AS item_count
+        FROM full_order_items item
+        WHERE item.order_number = fo.order_number
+          AND item.full_order_id = fo.full_order_id
+    ) foi ON true
+    WHERE i.created_at >= $1
+      AND i.created_at <= $2
+    GROUP BY
+        s."name",
+        2;
+
+    `;
+  try {
+    const result = await pool.query(query, [invoiceFrom, invoiceTo]);
+    return res.status(200).json(result.rows);
+  } catch (error) {
+    return res.status(500).json({ error: "Erro ao buscar produtos" });
+  }
+});
+
 router.get("/:search", async (req: AuthRequest, res) => {
+  console.log("/:search");
+
   // 1. Extrai search, page e limit da query string (com valores padrão caso não sejam enviados)
   let { search } = req.params;
 
