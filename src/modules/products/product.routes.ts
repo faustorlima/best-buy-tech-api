@@ -288,6 +288,7 @@ router.get("/", async (req: AuthRequest, res) => {
     }
 
     const countResult = await pool.query(countQuery, countParams);
+    1;
     const totalItems = parseInt(countResult.rows[0].count, 10);
     const totalPages = Math.ceil(totalItems / limitNumber);
 
