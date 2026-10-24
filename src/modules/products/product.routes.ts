@@ -11,6 +11,7 @@ import {
   authenticateToken,
   type AuthRequest,
 } from "../auth/middlewares/authMiddleware.js";
+import { Console } from "console";
 
 const router = Router();
 
@@ -126,17 +127,19 @@ router.post(
 
         // Maps Portuguese spreadsheet headers to technical DTO keys
         const modelSku =
-          row["Sku"] || row["SKU"] || row["sku"] || row["modelSku"];
+          row["Sku"] || row["SKU"] || row["sku"] || row["modelSku"] || "";
         const barCode =
           row["Código de Barras"] ||
           row["Codigo de Barras"] ||
           row["codigo de barras"] ||
-          row["barCode"];
+          row["barCode"] ||
+          "";
         const imeiCount =
           row["Quantidade de IMEIs"] ||
           row["Quantidade de Imeis"] ||
           row["quantidade de imeis"] ||
-          row["imeiCount"];
+          row["imeiCount"] ||
+          0;
 
         if (!modelSku) {
           errorList.push(
@@ -316,32 +319,39 @@ router.get("/:barCode", async (req: AuthRequest, res) => {
     SELECT *
     FROM products
     WHERE bar_code = $1
+    and is_deleted = false
   `;
 
   try {
+    console.log("queryText", queryText);
     const result = await pool.query(queryText, [barCode]);
+
+    console.log("rowCount", result.rowCount);
 
     // Caso o ID informado não exista no banco
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Produto não encontrado" });
+      return res.status(404).json();
     }
 
     // Retorna o produto atualizado
     return res.status(200).json(result.rows[0]);
   } catch (error) {
+    console.log("error", error);
     return res.status(500).json({ error: "Erro ao buscar produtos" });
   }
 });
 
 // 1. Rota PUT ajustada com o prefixo /api e alisamento para camelCase
 router.put(
-  "/:barCode",
+  "/:productId",
   uploadPhoto.single("image"),
   async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-      const { modelSku, imeiCount } = req.body;
-      const { barCode } = req.params;
+      let { modelSku, imeiCount, barCode } = req.body;
+      const { productId } = req.params;
       const imageUrl = (req.file as any)?.location;
+
+      imeiCount = imeiCount || 0;
 
       let query = "";
       let params: any[] = [];
@@ -349,8 +359,8 @@ router.put(
       if (imageUrl) {
         query = `
         UPDATE products
-        SET model_sku = $1, image_url = $2, imei_count = $3
-        WHERE bar_code = $4
+        SET model_sku = $1, image_url = $2, imei_count = $3, bar_code = $4
+        WHERE product_id = $5
         RETURNING
           product_id AS "productId",
           bar_code AS "barCode",
@@ -358,12 +368,12 @@ router.put(
           image_url AS "imageUrl",
           imei_count AS "imeiCount"
       `;
-        params = [modelSku, imageUrl, imeiCount, barCode];
+        params = [modelSku, imageUrl, imeiCount, barCode, productId];
       } else {
         query = `
         UPDATE products
-        SET model_sku = $1, imei_count = $2
-        WHERE bar_code = $3
+        SET model_sku = $1, imei_count = $2, bar_code = $3
+        WHERE product_id = $4
         RETURNING
           product_id AS "productId",
           bar_code AS "barCode",
@@ -371,7 +381,7 @@ router.put(
           image_url AS "imageUrl",
           imei_count AS "imeiCount"
       `;
-        params = [modelSku, imeiCount, barCode];
+        params = [modelSku, imeiCount, barCode, productId];
       }
 
       const result = await pool.query(query, params);
@@ -394,8 +404,12 @@ router.post(
   uploadPhoto.single("image"),
   async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-      const { modelSku, barCode, imeiCount } = req.body;
+      let { modelSku, barCode, imeiCount } = req.body;
       const imageUrl = (req.file as any)?.location || null;
+
+      imeiCount = imeiCount || 0;
+
+      console.log("product.post", modelSku, barCode, imeiCount, imageUrl);
 
       const queryText = `
       INSERT INTO products (model_sku, bar_code, image_url, imei_count)
