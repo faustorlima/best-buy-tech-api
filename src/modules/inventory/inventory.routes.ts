@@ -8,6 +8,7 @@ import {
   authenticateToken,
   type AuthRequest,
 } from "../auth/middlewares/authMiddleware.js";
+import { Console } from "console";
 
 const router = Router();
 
@@ -34,6 +35,8 @@ const pool = new Pool({
 router.post(
   "/transactions",
   async (req: AuthRequest, res: Response): Promise<any> => {
+    console.log("transactions req.body", req.body);
+
     const { productId, transactionType, orderNumber, imeis } = req.body;
 
     const client = await pool.connect();

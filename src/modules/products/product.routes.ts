@@ -323,17 +323,10 @@ router.get("/:barCode", async (req: AuthRequest, res) => {
   `;
 
   try {
-    console.log("queryText", queryText);
     const result = await pool.query(queryText, [barCode]);
-
-    console.log("rowCount", result.rowCount);
-
-    // Caso o ID informado não exista no banco
     if (result.rowCount === 0) {
       return res.status(404).json();
     }
-
-    // Retorna o produto atualizado
     return res.status(200).json(result.rows[0]);
   } catch (error) {
     console.log("error", error);
