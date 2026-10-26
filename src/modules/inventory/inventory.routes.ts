@@ -37,44 +37,60 @@ router.post(
   async (req: AuthRequest, res: Response): Promise<any> => {
     console.log("transactions req.body", req.body);
 
-    const { productId, transactionType, orderNumber, imeis } = req.body;
+    const {
+      productId,
+      transactionOrigin,
+      transactionType,
+      orderNumber,
+      imeis,
+    } = req.body;
 
     const client = await pool.connect();
 
     try {
       await client.query("BEGIN");
 
-      const itemResult = await client.query(
-        `
-        INSERT INTO public.inventory_items (product_id, status)
-        VALUES ($1, $2)
+      const existingItem = await client.query(
+        `SELECT   inventory_item_id
+         FROM     public.inventory_items
+         WHERE    product_id = $1 AND imeis = $2`,
+        [productId, imeis],
+      );
+
+      let inventoryItemId = existingItem.rows[0]?.inventory_item_id || null;
+
+      if (!inventoryItemId) {
+        const itemResult = await client.query(
+          `
+        INSERT INTO public.inventory_items (product_id, status, imeis)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (product_id, imeis)
+        DO UPDATE SET status = EXCLUDED.status
         RETURNING inventory_item_id;
       `,
-        [
-          productId,
-          transactionType === "IN" ? "AVAILABLE" : "SOLD", // Ajusta o status baseando na transação
-        ],
-      );
+          [
+            productId,
+            transactionType === "IN" ? "Disponível" : "Vendido/Sem Estoque", // Ajusta o status baseando na transação
+            imeis,
+          ],
+        );
 
-      const inventoryItemId = itemResult.rows[0].inventory_item_id;
-
-      // 2. Inserir os IMEIs vinculados ao ID do aparelho recém-criado
-      await client.query(
-        `
-        INSERT INTO public.inventory_item_imeis (inventory_item_id, imei_number)
-        SELECT $1, unnest($2::varchar[])
-        ON CONFLICT (imei_number)
-        DO UPDATE SET inventory_item_id = EXCLUDED.inventory_item_id;
-      `,
-        [inventoryItemId, imeis],
-      );
+        inventoryItemId = itemResult.rows[0].inventory_item_id;
+      } else if (transactionType == "OUT") {
+        const updateItem = await client.query(
+          `UPDATE   public.inventory_items
+           set      status = 'Vendido/Sem Estoque'
+           WHERE    inventory_Item_Id = $1`,
+          [inventoryItemId],
+        );
+      }
 
       // 3. Inserir a Movimentação vinculada ao Aparelho Físico
       const transResult = await client.query(
         `
         INSERT INTO public.inventory_transactions
-          (product_id, inventory_item_id, quantity, transaction_type, order_number)
-        VALUES ($1, $2, $3, $4, $5)
+          (product_id, inventory_item_id, quantity, transaction_type, order_number, transaction_origin)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING inventory_transaction_id;
       `,
         [
@@ -83,6 +99,7 @@ router.post(
           1, // Cada registro de transação agora representa 1 aparelho físico
           transactionType,
           orderNumber,
+          transactionOrigin,
         ],
       );
 
@@ -97,7 +114,7 @@ router.post(
       INSERT INTO public.inventory (product_id, quantity)
       VALUES ($1, $2)
       ON CONFLICT (product_id)
-      DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+      DO UPDATE SET quantity = public.inventory.quantity ${transactionType == "IN" ? "+" : "-"} EXCLUDED.quantity;
     `,
         [productId, quantityToUpdate],
       );
@@ -207,13 +224,11 @@ router.get("/items", async (req: AuthRequest, res: Response): Promise<any> => {
             p.bar_code as "barCode",
             p.model_sku as "modelSku",
             ii.status,
-            STRING_AGG(iii.imei_number, ', ') AS imeis,
+            array_to_string(imeis, ',') as imeis,
             ii.created_at as "createdAt"
     FROM    inventory_items ii
     INNER   JOIN products p ON ii.product_id = p.product_id
-    INNER   JOIN inventory_item_imeis iii ON ii.inventory_item_id = iii.inventory_item_id
     where 	p.product_id = $1
-    GROUP   BY 1, 2, 3, 4, 6;
   `;
 
   const result = await pool.query(query, [productId]);
@@ -240,4 +255,53 @@ router.get("/items", async (req: AuthRequest, res: Response): Promise<any> => {
     },
   });
 });
+
+router.get(
+  "/transactions",
+  async (req: AuthRequest, res: Response): Promise<any> => {
+    let { productId, page = "1", limit = "10" } = req.query;
+    const pageNumber = parseInt(page as string, 10);
+    const limitNumber = parseInt(limit as string, 10);
+
+    let query = `
+    SELECT  p.product_id as "productId",
+            p.bar_code as "barCode",
+            p.model_sku as "modelSku",
+            it.quantity,
+            it.order_number as "orderNumber",
+            it.transaction_origin as "transactionOrigin",
+            it.transaction_type as "transactionType",
+            it.created_at as "createdAt",
+            ii.imeis
+    FROM    inventory_transactions it
+    INNER   JOIN products p ON it.product_id = p.product_id
+    INNER   JOIN inventory_items ii ON it.inventory_item_id = ii.inventory_item_id
+    where 	p.product_id = $1
+  `;
+
+    const result = await pool.query(query, [productId]);
+
+    // 4. Adiciona Ordenação, Limite e Offset para a paginação
+    // (Ex: ORDER BY id DESC para mostrar os mais recentes primeiro)
+    query += " ORDER BY p.model_sku LIMIT $2 OFFSET $3";
+
+    // 6. (Opcional mas recomendado) Busca o total de registros para o Front-end saber quantas páginas existem
+    let countQuery =
+      "SELECT COUNT(*) from	inventory_items ii WHERE product_id = $1";
+    const countResult = await pool.query(countQuery, [productId]);
+
+    const totalItems = parseInt(countResult.rows[0].count, 10);
+    const totalPages = Math.ceil(totalItems / limitNumber);
+
+    return res.json({
+      data: result.rows,
+      pagination: {
+        currentPage: pageNumber,
+        perPage: limitNumber,
+        totalItems,
+        totalPages,
+      },
+    });
+  },
+);
 export default router;
