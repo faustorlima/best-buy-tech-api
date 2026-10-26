@@ -275,7 +275,7 @@ router.get("/", async (req: AuthRequest, res) => {
 
     // 4. Adiciona Ordenação, Limite e Offset para a paginação
     // (Ex: ORDER BY id DESC para mostrar os mais recentes primeiro)
-    query += ` ORDER BY model_sku DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    query += ` ORDER BY model_sku LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     queryParams.push(limitNumber, offset);
 
     // 5. Executa a query principal
