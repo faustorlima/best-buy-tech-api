@@ -105,16 +105,15 @@ router.post(
 
       const transactionId = transResult.rows[0].inventory_transaction_id;
 
-      // PASSO B: Atualizar o Estoque Absoluto (Visão Agregada)
-      // Se a transação for de saída (OUT), o EXCLUDED.quantity deve ser negativo para subtrair
-      const quantityToUpdate = 1;
+      let quantityToUpdate = 1;
+      if (transactionType == "OUT") quantityToUpdate = -1;
 
       await client.query(
         `
       INSERT INTO public.inventory (product_id, quantity)
       VALUES ($1, $2)
       ON CONFLICT (product_id)
-      DO UPDATE SET quantity = public.inventory.quantity ${transactionType == "IN" ? "+" : "-"} EXCLUDED.quantity;
+      DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
     `,
         [productId, quantityToUpdate],
       );
