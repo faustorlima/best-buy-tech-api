@@ -66,8 +66,8 @@ router.get("/", async (req: AuthRequest, res) => {
       left  join public.integration_mappings im on fo.order_original_status = im.external_value and im.provider = UPPER(ic.name) and im.domain = 'ORDER_STATUS'
       left  join invoices i on fo.order_number = i.order_number and fo.store_id = i.store_id
       where (fo.store_id = $1 OR $1 is null)
-      and   (fo.order_payment_date >= $2 or $2 is null)
-      and   (fo.order_payment_date <= $3 or $3 is null)
+      and   (fo.order_creation_date >= $2 or $2 is null)
+      and   (fo.order_creation_date <= $3 or $3 is null)
       and   (fo.order_number = $4 or $4 is null)
       and   (i.external_id = $5 or $5 is null)
       and   (i.nf_status = $6 or $6 is null)
